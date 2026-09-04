@@ -151,10 +151,16 @@ function JarvisInner() {
                     </div>
                   )}
                   {t.status === "completed" && (
-                    <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                      <StatusDot status="ok" />
-                      {t.meta}
-                    </div>
+                    <details className="group mt-1.5">
+                      <summary className="flex w-fit cursor-pointer select-none items-center gap-1.5 text-[11px] text-slate-600 transition hover:text-slate-400">
+                        <StatusDot status="ok" />
+                        Completed
+                        <span className="transition group-open:rotate-180">▾</span>
+                      </summary>
+                      <div className="mt-1 font-mono text-[11px] text-slate-600">
+                        {t.meta}
+                      </div>
+                    </details>
                   )}
                 </div>
               </div>

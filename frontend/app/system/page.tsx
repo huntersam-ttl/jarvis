@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { HealthResponse, SystemStatus } from "@/types/api";
-import { Card, PageHeader, StatusDot, statusTone } from "@/components/ui";
+import { Card, PageHeader, StatusChip, StatusDot, statusTone } from "@/components/ui";
 
 export default function SystemPage() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -81,10 +81,10 @@ export default function SystemPage() {
               return (
                 <li
                   key={c.name}
-                  className="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-850/60 px-4 py-3"
+                  className="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-850/60 px-4 py-3 transition duration-200 hover:border-white/10 hover:bg-ink-800/60"
                 >
-                  <StatusDot status={tone.dot} animate={tone.dot === "warn"} />
-                  <div className="min-w-0">
+                  <StatusChip status={c.status} animate={statusTone(c.status).dot === "warn"} />
+                  <div className="min-w-0 ml-1">
                     <div className="text-sm font-medium text-white">{c.name}</div>
                     {c.detail && (
                       <div className="truncate text-xs text-slate-500">
@@ -92,9 +92,6 @@ export default function SystemPage() {
                       </div>
                     )}
                   </div>
-                  <span className="ml-auto shrink-0 text-xs capitalize text-slate-400">
-                    {c.status.replace("_", " ")}
-                  </span>
                 </li>
               );
             })}

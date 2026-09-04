@@ -31,6 +31,7 @@ module.exports = {
       boxShadow: {
         glass: "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 8px 30px rgba(0,0,0,0.35)",
         glow: "0 0 0 1px rgba(91,140,255,0.25), 0 0 24px rgba(91,140,255,0.18)",
+        depth: "0 1px 0 0 rgba(255,255,255,0.06) inset, 0 12px 36px rgba(0,0,0,0.45), 0 0 20px rgba(91,140,255,0.08)",
       },
       backgroundImage: {
         "grid-faint":

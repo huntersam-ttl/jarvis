@@ -39,6 +39,32 @@ export function statusTone(
   return { dot: "idle", label: status };
 }
 
+export function StatusChip({
+  status,
+  animate,
+  className = "",
+}: {
+  status: string;
+  animate?: boolean;
+  className?: string;
+}) {
+  const tone = statusTone(status);
+  const tint =
+    tone.dot === "ok"
+      ? "text-ok border-ok/25 bg-ok/10"
+      : tone.dot === "warn"
+        ? "text-warn border-warn/25 bg-warn/10"
+        : tone.dot === "bad"
+          ? "text-bad border-bad/25 bg-bad/10"
+          : "text-slate-400 border-white/10 bg-ink-850/80";
+  return (
+    <span className={`chip capitalize ${tint} ${className}`}>
+      <StatusDot status={tone.dot} animate={animate} />
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
 export function Card({
   title,
   eyebrow,
@@ -114,9 +140,14 @@ export function PageHeader({
   subtitle?: string;
 }) {
   return (
-    <header className="mb-6">
-      <h1 className="text-xl font-semibold tracking-tight text-white">{title}</h1>
-      {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+    <header className="mb-7 animate-fadeUp">
+      <div className="flex items-center gap-3">
+        <span className="h-6 w-1 rounded-full bg-gradient-to-b from-accent to-accent-glow" />
+        <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
+      </div>
+      {subtitle && (
+        <p className="mt-1.5 pl-4 text-sm text-slate-500">{subtitle}</p>
+      )}
     </header>
   );
 }

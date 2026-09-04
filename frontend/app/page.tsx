@@ -93,7 +93,7 @@ export default function Home() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* System status */}
-        <Card eyebrow="System" title="Jarvis Status">
+        <Card eyebrow="System" title="Jarvis Status" className="glass-hover">
           {system ? (
             <div className="flex items-center gap-3">
               <StatusDot
@@ -157,14 +157,14 @@ export default function Home() {
 
         {/* Capability badges */}
         <Card eyebrow="Capabilities" title="Modules">
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2">
+          <div className="space-y-2.5 text-sm">
+            <div className="chip w-fit border-ok/25 bg-ok/10 text-ok">
               <StatusDot status="ok" />
-              <span className="text-slate-300">Coding — READY</span>
+              Coding · Ready
             </div>
-            <div className="flex items-center gap-2">
-              <StatusDot status="idle" />
-              <span className="text-slate-500">Trading — BRIDGE (mock agent)</span>
+            <div className="chip w-fit border-warn/25 bg-warn/10 text-warn">
+              <StatusDot status="warn" />
+              Trading · Bridge
             </div>
           </div>
         </Card>

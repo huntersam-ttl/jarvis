@@ -41,14 +41,21 @@ export default function Nav() {
             <Link
               key={l.href}
               href={l.href}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${
+              className={`group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition duration-200 ${
                 active
                   ? "bg-accent/15 text-white shadow-glow"
                   : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
               }`}
             >
               <span
-                className={`w-4 text-center ${active ? "text-accent" : "text-slate-500"}`}
+                className={`absolute left-0 top-1/2 hidden h-5 w-0.5 -translate-y-1/2 rounded-full bg-accent transition-opacity md:block ${
+                  active ? "opacity-100" : "opacity-0 group-hover:opacity-40"
+                }`}
+              />
+              <span
+                className={`w-4 text-center transition-transform duration-200 ${
+                  active ? "text-accent" : "text-slate-500 group-hover:scale-110"
+                }`}
               >
                 {l.icon}
               </span>

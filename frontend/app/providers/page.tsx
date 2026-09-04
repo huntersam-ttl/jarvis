@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { ProviderList, ProviderModelList } from "@/types/api";
-import { Card, PageHeader, StatusDot, statusTone } from "@/components/ui";
+import { Card, PageHeader, StatusChip } from "@/components/ui";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<ProviderList | null>(null);
   const [models, setModels] = useState<ProviderModelList | null>(null);
-  const [showModels, setShowModels] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -58,13 +57,10 @@ export default function ProvidersPage() {
         ) : (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <StatusDot
-                status={statusTone(openrouter.status).dot}
+              <StatusChip
+                status={openrouter.status}
                 animate={openrouter.status === "offline"}
               />
-              <span className="text-sm font-medium capitalize text-white">
-                {openrouter.status.replace("_", " ")}
-              </span>
               <span className="ml-auto text-xs text-slate-500">
                 {openrouter.api_key_configured
                   ? "API key: Configured"
@@ -73,12 +69,6 @@ export default function ProvidersPage() {
             </div>
 
             <dl className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/5 bg-ink-850/60 px-4 py-3">
-                <dt className="label-eyebrow mb-1">Base URL</dt>
-                <dd className="truncate font-mono text-xs text-slate-300">
-                  {openrouter.base_url || "—"}
-                </dd>
-              </div>
               <div className="rounded-xl border border-white/5 bg-ink-850/60 px-4 py-3">
                 <dt className="label-eyebrow mb-1">Default model</dt>
                 <dd className="truncate font-mono text-xs text-slate-300">
@@ -93,7 +83,7 @@ export default function ProvidersPage() {
                     : "—"}
                 </dd>
               </div>
-              <div className="rounded-xl border border-white/5 bg-ink-850/60 px-4 py-3">
+              <div className="rounded-xl border border-white/5 bg-ink-850/60 px-4 py-3 sm:col-span-2">
                 <dt className="label-eyebrow mb-1">API key</dt>
                 <dd className="text-sm text-slate-300">
                   {openrouter.api_key_configured ? (
@@ -106,16 +96,21 @@ export default function ProvidersPage() {
               </div>
             </dl>
 
-            {models && (
-              <div>
-                <button
-                  className="btn-ghost !py-1.5 !text-xs"
-                  onClick={() => setShowModels((s) => !s)}
-                >
-                  {showModels ? "Hide models" : `Show ${models.count} models`}
-                </button>
-                {showModels && (
-                  <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-white/5 bg-ink-950/60 p-3">
+            <div className="space-y-3">
+              {models && (
+                <details className="group rounded-xl border border-white/5 bg-ink-850/60">
+                  <summary className="flex cursor-pointer select-none items-center justify-between px-4 py-3 text-sm text-slate-300 transition hover:text-white">
+                    <span>
+                      Model catalog
+                      <span className="ml-2 text-xs text-slate-500">
+                        {models.count} available
+                      </span>
+                    </span>
+                    <span className="text-xs text-slate-500 transition group-open:rotate-180">
+                      ▾
+                    </span>
+                  </summary>
+                  <div className="max-h-72 overflow-y-auto border-t border-white/5 p-3">
                     <ul className="grid gap-1 font-mono text-xs text-slate-400 sm:grid-cols-2">
                       {models.models.map((m) => (
                         <li key={m.id} className="truncate">
@@ -124,9 +119,23 @@ export default function ProvidersPage() {
                       ))}
                     </ul>
                   </div>
-                )}
-              </div>
-            )}
+                </details>
+              )}
+              <details className="group rounded-xl border border-white/5 bg-ink-850/60">
+                <summary className="flex cursor-pointer select-none items-center justify-between px-4 py-3 text-sm text-slate-300 transition hover:text-white">
+                  <span>Advanced / connection details</span>
+                  <span className="text-xs text-slate-500 transition group-open:rotate-180">
+                    ▾
+                  </span>
+                </summary>
+                <div className="border-t border-white/5 px-4 py-3">
+                  <div className="label-eyebrow mb-1">Base URL</div>
+                  <div className="truncate font-mono text-xs text-slate-400">
+                    {openrouter.base_url || "—"}
+                  </div>
+                </div>
+              </details>
+            </div>
           </div>
         )}
       </Card>
