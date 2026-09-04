@@ -2,7 +2,7 @@
 
 ## Secrets
 
-- The OmniRoute API key is stored **only** in `.env` as `OMNIROUTE_API_KEY`.
+- The OpenRouter API key is stored **only** in `.env` as `OPENROUTER_API_KEY`.
 - `.env` is git-ignored (see [`.gitignore`](../.gitignore)).
 - `.env.example` contains placeholders only — never real values.
 - The key is never hard-coded, printed, logged, or sent to the frontend.
@@ -32,7 +32,7 @@ git diff --cached | grep -iE "api[_-]?key|secret|token|password" || true
 ## Provider boundaries
 
 - The backend is the only component that holds credentials and talks to
-  providers. The frontend never contacts OmniRoute directly.
+  providers. The frontend never contacts OpenRouter directly.
 
 ## Git / GitHub
 

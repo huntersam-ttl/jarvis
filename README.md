@@ -5,7 +5,7 @@ personal operating system that will later control autonomous trading, coding,
 research, projects, world intelligence, and other automation.
 
 This repository contains **Jarvis v0** — the foundation: a FastAPI backend with
-an OmniRoute provider integration, a model router, and a polished Next.js
+an OpenRouter provider integration, a model router, and a polished Next.js
 "Control Room" frontend.
 
 ---
@@ -27,7 +27,7 @@ Jarvis Backend      (FastAPI + Pydantic)
   ↓
 Provider Layer      (generic provider abstraction)
   ↓
-OmniRoute           (local Docker gateway, OpenAI-compatible)
+OpenRouter           (cloud AI gateway, OpenAI-compatible)
   ↓
 AI models
 ```
@@ -51,7 +51,7 @@ jarvis/
 
 - Python 3.9+
 - Node.js 18+ (developed on Node 22)
-- OmniRoute running locally via Docker at `http://127.0.0.1:20128/v1`
+- An OpenRouter account and API key (https://openrouter.ai)
 
 ## Install
 
@@ -60,7 +60,7 @@ jarvis/
 ```bash
 cd jarvis
 cp .env.example .env
-# Edit .env and set OMNIROUTE_API_KEY to your real OmniRoute key
+# Edit .env and set OPENROUTER_API_KEY to your real OpenRouter key
 ```
 
 ### 2. Backend
@@ -79,16 +79,16 @@ cd frontend
 npm install
 ```
 
-## Configure OmniRoute
+## Configure OpenRouter
 
-OmniRoute is an OpenAI-compatible gateway running locally through Docker.
+OpenRouter is a cloud, OpenAI-compatible AI gateway.
 
 In `.env`:
 
 ```
-OMNIROUTE_BASE_URL=http://127.0.0.1:20128/v1
-OMNIROUTE_API_KEY=<your real key>
-OMNIROUTE_DEFAULT_MODEL=auto/glm
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_API_KEY=<your real key>
+OPENROUTER_DEFAULT_MODEL=openai/gpt-4o-mini
 ```
 
 The API key is read only from `.env`, never printed, never logged, and never

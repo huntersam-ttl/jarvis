@@ -7,7 +7,7 @@ foundation.
 
 - FastAPI backend with clean layering (api / services / providers / models / core)
 - Generic provider abstraction
-- OmniRoute provider integration (health, models, chat, model info)
+- OpenRouter provider integration (health, models, chat, model info)
 - Model router v0 (default provider + default model, run metadata)
 - Control Room UI: Home, Jarvis chat, Tasks, Trading, Projects, Memory, Providers, System
 - Configuration via `.env`, health monitoring, permission foundation

@@ -14,7 +14,7 @@ Jarvis Backend       (FastAPI + Pydantic)
   ↓
 Provider Layer       (generic Provider abstraction)
   ↓
-OmniRoute            (local Docker gateway, OpenAI-compatible)
+OpenRouter            (local Docker gateway, OpenAI-compatible)
   ↓
 AI models
 ```
@@ -27,7 +27,7 @@ app/
 ├── config.py         Settings via pydantic-settings + python-dotenv
 ├── api/              HTTP route layer (system, providers, chat)
 ├── core/             Cross-cutting: logging, timing, exceptions
-├── providers/        Provider abstraction + OmniRoute implementation
+├── providers/        Provider abstraction + OpenRouter implementation
 ├── services/         Use-case orchestration (chat service, model router)
 └── models/           Pydantic schemas (request/response DTOs)
 ```
@@ -40,7 +40,7 @@ app/
   provider/model via the `ModelRouter`, calls the provider, records run
   metadata, and returns a normalized response.
 - **Providers** (`providers/`): a generic `Provider` interface plus the
-  `OmniRouteProvider` implementation. New OpenAI-compatible providers are
+  `OpenRouterProvider` implementation. New OpenAI-compatible providers are
   added by implementing the interface — Jarvis core does not change.
 - **Models** (`models/`): Pydantic schemas for API contracts and internal
   normalized structures.
@@ -50,8 +50,8 @@ app/
 
 v0 is intentionally simple:
 
-- Default provider: OmniRoute.
-- Default model: from environment (`OMNIROUTE_DEFAULT_MODEL`).
+- Default provider: OpenRouter.
+- Default model: from environment (`OPENROUTER_DEFAULT_MODEL`).
 - Each request records: requested model, provider, duration, success/failure.
 
 Later phases will add cost-aware routing, quality routing, and task-specific

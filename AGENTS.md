@@ -9,7 +9,7 @@ Operating notes for AI agents (and humans) working on Jarvis.
 
 ## Secrets
 
-- The OmniRoute API key is read **only** from `.env` via `OMNIROUTE_API_KEY`.
+- The OpenRouter API key is read **only** from `.env` via `OPENROUTER_API_KEY`.
 - Never hard-code, print, log, or expose the key to the frontend.
 - `.env` is git-ignored. `.env.example` contains placeholders only.
 - Before every commit, verify no secret is staged. If a secret is detected,
@@ -43,6 +43,6 @@ Operating notes for AI agents (and humans) working on Jarvis.
 ## Completion criteria
 
 Do not claim completion until: backend starts, frontend starts, `/health`
-works, OmniRoute connection works, models endpoint works, Jarvis chat works,
+works, OpenRouter connection works, models endpoint works, Jarvis chat works,
 UI sends a message and displays a response, tests pass, secrets are not
 tracked, and work is committed locally. Do not fake results.
