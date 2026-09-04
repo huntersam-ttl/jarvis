@@ -11,6 +11,7 @@ from app.config import Settings, get_settings
 from app.providers.openrouter import OpenRouterProvider
 from app.services.chat import ChatService
 from app.services.router import ModelRouter
+from app.trading.service import TradingService, build_trading_service
 
 
 @lru_cache
@@ -31,3 +32,13 @@ def get_model_router() -> ModelRouter:
 @lru_cache
 def get_chat_service() -> ChatService:
     return ChatService(get_model_router())
+
+
+@lru_cache
+def get_trading_service() -> "TradingService":
+    settings: Settings = get_settings()
+    return build_trading_service(
+        trading_agent_base_url=settings.trading_agent_base_url,
+        trading_agent_api_key=settings.trading_agent_api_key,
+        default_mode=settings.trading_default_mode,
+    )

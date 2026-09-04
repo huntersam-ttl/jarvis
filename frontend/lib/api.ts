@@ -8,6 +8,11 @@ import type {
   ProviderList,
   ProviderModelList,
   SystemStatus,
+  TradingActivityItem,
+  TradingCommandResult,
+  TradingPerformance,
+  TradingPosition,
+  TradingStatus,
 } from "@/types/api";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -43,4 +48,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  tradingStatus: () => request<TradingStatus>("/api/trading/status"),
+  tradingPositions: () => request<TradingPosition[]>("/api/trading/positions"),
+  tradingActivity: (limit = 20) =>
+    request<TradingActivityItem[]>(`/api/trading/activity?limit=${limit}`),
+  tradingPerformance: () =>
+    request<TradingPerformance>("/api/trading/performance"),
+  tradingCommand: (command: "start" | "pause" | "resume" | "stop") =>
+    request<TradingCommandResult>(`/api/trading/${command}`, { method: "POST" }),
 };

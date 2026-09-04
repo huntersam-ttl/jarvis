@@ -78,3 +78,42 @@ class SystemComponent(BaseModel):
 class SystemStatus(BaseModel):
     overall: str  # online | degraded | offline
     components: List[SystemComponent]
+
+
+# ---------------------------------------------------------------- trading
+class TradingPosition(BaseModel):
+    symbol: str
+    side: str  # long | short
+    qty: float
+    entry_price: float
+    unrealized_pnl: float
+
+
+class TradingActivityItem(BaseModel):
+    id: str
+    time: str  # ISO timestamp
+    event: str  # started | paused | resumed | stopped | trade | error
+    detail: Optional[str] = None
+
+
+class TradingPerformance(BaseModel):
+    today_pnl: float
+    total_pnl: float
+    win_rate: Optional[float] = None
+    trades_today: int = 0
+
+
+class TradingStatus(BaseModel):
+    connected: bool
+    mode: str  # paper | live
+    state: str  # offline | running | paused | error
+    open_positions: int = 0
+    today_pnl: float = 0.0
+    last_heartbeat: Optional[str] = None
+    adapter: str  # mock | http
+
+
+class TradingCommandResult(BaseModel):
+    success: bool
+    state: str
+    detail: Optional[str] = None

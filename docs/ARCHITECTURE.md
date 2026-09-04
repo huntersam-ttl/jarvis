@@ -82,3 +82,20 @@ Advanced/Developer view; normal interaction stays clean.
 - The API key lives only in backend `.env`. It is never sent to the frontend.
 - The Providers screen shows "Configured / Missing" — never the secret.
 - CORS is restricted to configured origins (`JARVIS_CORS_ORIGINS`).
+
+## Trading Bridge (Phase 2 entry point)
+
+Jarvis wraps an existing, separately developed trading agent. Jarvis does not
+contain trading intelligence — it is the control and monitoring layer.
+
+- `app/trading/base.py` — generic `TradingAdapter` interface
+- `app/trading/mock.py` — in-memory mock adapter for development
+- `app/trading/http_adapter.py` — HTTP adapter for the real agent
+  (`TRADING_AGENT_BASE_URL` + `TRADING_AGENT_API_KEY`, env-only)
+- `app/trading/service.py` — adapter selection + normalized failures
+- `app/api/trading.py` — `/api/trading/{status,positions,activity,performance}`
+  and `POST /api/trading/{start,pause,resume,stop}`
+
+The HTTP adapter expects the trading agent to expose normalized JSON at
+`/status`, `/positions`, `/activity`, `/performance` and `/commands/{cmd}`.
+Only `http_adapter.py` needs to change if the real agent's API differs.

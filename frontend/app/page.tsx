@@ -164,7 +164,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2">
               <StatusDot status="idle" />
-              <span className="text-slate-500">Trading — NOT INSTALLED</span>
+              <span className="text-slate-500">Trading — BRIDGE (mock agent)</span>
             </div>
           </div>
         </Card>

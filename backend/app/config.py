@@ -30,6 +30,11 @@ class Settings(BaseSettings):
         default="openai/gpt-4o-mini", alias="OPENROUTER_DEFAULT_MODEL"
     )
 
+    # ---- Trading Agent (Phase 2 bridge) ----
+    trading_agent_base_url: str = Field(default="", alias="TRADING_AGENT_BASE_URL")
+    trading_agent_api_key: str = Field(default="", alias="TRADING_AGENT_API_KEY")
+    trading_default_mode: str = Field(default="paper", alias="TRADING_DEFAULT_MODE")
+
     # ---- Backend ----
     jarvis_env: str = Field(default="dev", alias="JARVIS_ENV")
     jarvis_backend_host: str = Field(default="127.0.0.1", alias="JARVIS_BACKEND_HOST")

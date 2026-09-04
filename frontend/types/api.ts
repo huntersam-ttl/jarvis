@@ -61,3 +61,42 @@ export type SystemStatus = {
   overall: "online" | "degraded" | "offline";
   components: SystemComponent[];
 };
+
+// ---------------------------------------------------------------- trading
+export type TradingPosition = {
+  symbol: string;
+  side: "long" | "short" | string;
+  qty: number;
+  entry_price: number;
+  unrealized_pnl: number;
+};
+
+export type TradingActivityItem = {
+  id: string;
+  time: string;
+  event: "started" | "paused" | "resumed" | "stopped" | "trade" | "error" | string;
+  detail?: string | null;
+};
+
+export type TradingPerformance = {
+  today_pnl: number;
+  total_pnl: number;
+  win_rate?: number | null;
+  trades_today: number;
+};
+
+export type TradingStatus = {
+  connected: boolean;
+  mode: "paper" | "live" | string;
+  state: "offline" | "running" | "paused" | "error" | string;
+  open_positions: number;
+  today_pnl: number;
+  last_heartbeat?: string | null;
+  adapter: "mock" | "http" | string;
+};
+
+export type TradingCommandResult = {
+  success: boolean;
+  state: string;
+  detail?: string | null;
+};
