@@ -7,6 +7,7 @@ const links: { href: string; label: string; icon: string; badge?: string }[] = [
   { href: "/", label: "Home", icon: "◈" },
   { href: "/jarvis", label: "Jarvis", icon: "◉" },
   { href: "/tasks", label: "Tasks", icon: "≡" },
+  { href: "/coding", label: "Coding", icon: "⌘" },
   { href: "/trading", label: "Trading", icon: "↗" },
   { href: "/projects", label: "Projects", icon: "▦" },
   { href: "/memory", label: "Memory", icon: "◌" },

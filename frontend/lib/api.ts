@@ -13,6 +13,11 @@ import type {
   TradingPerformance,
   TradingPosition,
   TradingStatus,
+  CancelResult,
+  CodingAgentStatus,
+  CodingTask,
+  CreateCodingTaskRequest,
+  ProjectRegistry,
 } from "@/types/api";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -56,4 +61,17 @@ export const api = {
     request<TradingPerformance>("/api/trading/performance"),
   tradingCommand: (command: "start" | "pause" | "resume" | "stop") =>
     request<TradingCommandResult>(`/api/trading/${command}`, { method: "POST" }),
+  codingStatus: () => request<CodingAgentStatus>("/api/agents/coding/status"),
+  codingProjects: () => request<ProjectRegistry>("/api/agents/coding/projects"),
+  codingTask: (taskId: string) =>
+    request<CodingTask>(`/api/agents/coding/tasks/${taskId}`),
+  createCodingTask: (body: CreateCodingTaskRequest) =>
+    request<CodingTask>("/api/agents/coding/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  cancelCodingTask: (taskId: string) =>
+    request<CancelResult>(`/api/agents/coding/tasks/${taskId}/cancel`, {
+      method: "POST",
+    }),
 };

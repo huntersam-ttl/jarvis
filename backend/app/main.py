@@ -11,6 +11,7 @@ from app.api import health as health_api
 from app.api import providers as providers_api
 from app.api import system as system_api
 from app.api import trading as trading_api
+from app.api import agents as agents_api
 from app.config import get_settings
 from app.core.logging import get_logger
 
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(providers_api.router)
     app.include_router(chat_api.router)
     app.include_router(trading_api.router)
+    app.include_router(agents_api.router)
 
     return app
 

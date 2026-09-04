@@ -100,3 +100,56 @@ export type TradingCommandResult = {
   state: string;
   detail?: string | null;
 };
+
+// ---------------------------------------------------------------- coding agent
+export type CodingAction = {
+  id: string;
+  step: number;
+  tool: string;
+  args_summary: string;
+  ok: boolean;
+  approval_required: boolean;
+  detail: string;
+  output_preview: string;
+  started_at: string;
+  duration_ms: number;
+};
+
+export type CodingTask = {
+  id: string;
+  status: "ready" | "working" | "completed" | "failed" | "cancelled" | string;
+  current_task: string;
+  project_path: string;
+  started_at: string;
+  finished_at?: string | null;
+  last_error?: string | null;
+  actions: CodingAction[];
+  result?: string | null;
+  steps_taken: number;
+};
+
+export type CodingAgentStatus = {
+  agent: string;
+  status: "ready" | "working" | string;
+  has_active_task: boolean;
+  task?: CodingTask | null;
+  allowed_projects: string[];
+};
+
+export type ProjectRegistry = {
+  projects: string[];
+};
+
+export type CreateCodingTaskRequest = {
+  instruction: string;
+  project_path: string;
+  model?: string | null;
+  max_steps?: number;
+  approve_destructive?: boolean;
+};
+
+export type CancelResult = {
+  success: boolean;
+  status: string;
+  detail?: string | null;
+};

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
         default="http://localhost:3000,http://127.0.0.1:3000",
         alias="JARVIS_CORS_ORIGINS",
     )
+    # Coding agent project registry (comma-separated absolute paths).
+    jarvis_allowed_projects: str = Field(default="", alias="JARVIS_ALLOWED_PROJECTS")
 
     @field_validator("openrouter_api_key")
     @classmethod
