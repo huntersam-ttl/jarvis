@@ -20,11 +20,11 @@ logger = get_logger("jarvis.main")
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info(
-        "Jarvis backend starting | env=%s | omniroute=%s | model=%s | configured=%s",
+        "Jarvis backend starting | env=%s | openrouter=%s | model=%s | configured=%s",
         settings.jarvis_env,
-        settings.omniroute_base_url,
-        settings.omniroute_default_model,
-        settings.omniroute_configured,
+        settings.openrouter_base_url,
+        settings.openrouter_default_model,
+        settings.openrouter_configured,
     )
     yield
     logger.info("Jarvis backend shutting down")

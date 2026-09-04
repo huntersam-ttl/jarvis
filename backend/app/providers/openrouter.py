@@ -1,7 +1,6 @@
-"""OmniRoute provider — OpenAI-compatible local gateway.
+"""OpenRouter provider — https://openrouter.ai/api/v1 (OpenAI-compatible).
 
-OmniRoute runs locally via Docker at OMNIROUTE_BASE_URL.
-The API key is read from settings and sent only as a bearer token to OmniRoute.
+The API key is read from settings and sent only as a bearer token to OpenRouter.
 It is never printed, logged, or exposed to the frontend.
 """
 from __future__ import annotations
@@ -19,13 +18,18 @@ from app.core.logging import get_logger
 from app.models.schemas import ProviderModel
 from app.providers.base import Provider
 
-logger = get_logger("jarvis.providers.omniroute")
+logger = get_logger("jarvis.providers.openrouter")
 
 
-class OmniRouteProvider(Provider):
-    name = "omniroute"
+class OpenRouterProvider(Provider):
+    name = "openrouter"
 
-    def __init__(self, base_url: str, api_key: str, default_model: str = "auto/glm"):
+    def __init__(
+        self,
+        base_url: str = "https://openrouter.ai/api/v1",
+        api_key: str = "",
+        default_model: str = "openai/gpt-4o-mini",
+    ):
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._default_model = default_model
@@ -35,16 +39,23 @@ class OmniRouteProvider(Provider):
     def configured(self) -> bool:
         return bool(self._api_key)
 
+    @property
+    def base_url(self) -> str:
+        return self._base_url
+
     def _headers(self) -> dict:
         return {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            # OpenRouter best practice: identify the calling app.
+            "HTTP-Referer": "http://localhost:3000",
+            "X-Title": "Jarvis",
         }
 
     def _ensure_configured(self) -> None:
         if not self.configured:
             raise ProviderNotConfiguredError(
-                "OmniRoute API key is not configured. Set OMNIROUTE_API_KEY in .env"
+                "OpenRouter API key is not configured. Set OPENROUTER_API_KEY in .env"
             )
 
     # ---- interface -----------------------------------------------------
@@ -63,18 +74,18 @@ class OmniRouteProvider(Provider):
     async def list_models(self) -> List[ProviderModel]:
         self._ensure_configured()
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.get(
                     f"{self._base_url}/models", headers=self._headers()
                 )
         except httpx.HTTPError as exc:
             raise ProviderUnreachableError(
-                f"Could not reach OmniRoute at {self._base_url}"
+                f"Could not reach OpenRouter at {self._base_url}"
             ) from exc
 
         if resp.status_code != 200:
             raise ProviderResponseError(
-                f"OmniRoute returned HTTP {resp.status_code}"
+                f"OpenRouter returned HTTP {resp.status_code}"
             )
 
         data = resp.json()
@@ -111,20 +122,22 @@ class OmniRouteProvider(Provider):
                 )
         except httpx.HTTPError as exc:
             raise ProviderUnreachableError(
-                f"Could not reach OmniRoute at {self._base_url}"
+                f"Could not reach OpenRouter at {self._base_url}"
             ) from exc
 
         if resp.status_code != 200:
             raise ProviderResponseError(
-                f"OmniRoute chat returned HTTP {resp.status_code}"
+                f"OpenRouter chat returned HTTP {resp.status_code}"
             )
 
         data = resp.json()
         choices = data.get("choices") or []
         if not choices:
-            raise ProviderResponseError("OmniRoute returned no choices")
+            raise ProviderResponseError("OpenRouter returned no choices")
         reply = choices[0].get("message", {}).get("content", "")
-        return reply.strip(), resolved_model
+        # Prefer the model actually reported by the provider, if present.
+        used_model = data.get("model") or resolved_model
+        return reply.strip(), used_model
 
     async def get_model_info(self, model: str) -> dict:
         models = await self.list_models()

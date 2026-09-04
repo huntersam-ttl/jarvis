@@ -5,41 +5,41 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.config import get_settings
 from app.core.exceptions import ProviderError
-from app.deps import get_omniroute_provider
+from app.deps import get_openrouter_provider
 from app.models.schemas import ProviderInfo, ProviderList, ProviderModelList
-from app.providers.omniroute import OmniRouteProvider
+from app.providers.openrouter import OpenRouterProvider
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
 
 @router.get("", response_model=ProviderList)
 async def list_providers(
-    omniroute: OmniRouteProvider = Depends(get_omniroute_provider),
+    openrouter: OpenRouterProvider = Depends(get_openrouter_provider),
 ) -> ProviderList:
     settings = get_settings()
 
-    if not omniroute.configured:
+    if not openrouter.configured:
         info = ProviderInfo(
-            name="omniroute",
+            name="openrouter",
             status="not_configured",
-            base_url=settings.omniroute_base_url,
-            default_model=settings.omniroute_default_model,
+            base_url=settings.openrouter_base_url,
+            default_model=settings.openrouter_default_model,
             model_count=0,
             api_key_configured=False,
         )
     else:
-        reachable = await omniroute.health_check()
+        reachable = await openrouter.health_check()
         model_count = 0
         if reachable:
             try:
-                model_count = len(await omniroute.list_models())
+                model_count = len(await openrouter.list_models())
             except ProviderError:
                 model_count = 0
         info = ProviderInfo(
-            name="omniroute",
+            name="openrouter",
             status="connected" if reachable else "offline",
-            base_url=settings.omniroute_base_url,
-            default_model=settings.omniroute_default_model,
+            base_url=settings.openrouter_base_url,
+            default_model=settings.openrouter_default_model,
             model_count=model_count,
             api_key_configured=True,
         )
@@ -47,12 +47,12 @@ async def list_providers(
     return ProviderList(providers=[info])
 
 
-@router.get("/omniroute/models", response_model=ProviderModelList)
-async def list_omniroute_models(
-    omniroute: OmniRouteProvider = Depends(get_omniroute_provider),
+@router.get("/openrouter/models", response_model=ProviderModelList)
+async def list_openrouter_models(
+    openrouter: OpenRouterProvider = Depends(get_openrouter_provider),
 ) -> ProviderModelList:
     try:
-        models = await omniroute.list_models()
+        models = await openrouter.list_models()
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return ProviderModelList(provider="omniroute", models=models, count=len(models))
+    return ProviderModelList(provider="openrouter", models=models, count=len(models))

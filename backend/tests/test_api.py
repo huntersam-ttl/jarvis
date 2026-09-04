@@ -4,20 +4,20 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.exceptions import ProviderResponseError
-from app.deps import get_chat_service, get_omniroute_provider
+from app.deps import get_chat_service, get_openrouter_provider
 from app.main import create_app
 from app.models.schemas import ChatResponse, ChatRunMeta
-from app.providers.omniroute import OmniRouteProvider
+from app.providers.openrouter import OpenRouterProvider
 from app.services.chat import ChatService
 from app.services.router import ModelRouter
 
 
-class FakeProvider(OmniRouteProvider):
-    """A fake OmniRoute provider that doesn't hit the network."""
+class FakeProvider(OpenRouterProvider):
+    """A fake OpenRouter provider that doesn't hit the network."""
 
     def __init__(self, *, configured=True, models=None, reply="Hello from Jarvis", fail=False):
-        super().__init__("http://fake/v1", "key" if configured else "", "auto/glm")
-        self._fake_models = models or [{"id": "auto/glm", "owned_by": "zai"}]
+        super().__init__("http://fake/v1", "key" if configured else "", "openai/gpt-4o-mini")
+        self._fake_models = models or [{"id": "openai/gpt-4o-mini", "owned_by": "zai"}]
         self._reply = reply
         self._fail = fail
 
@@ -44,7 +44,7 @@ def _override_app(provider: FakeProvider):
     router = ModelRouter(provider)
     chat_service = ChatService(router)
 
-    app.dependency_overrides[get_omniroute_provider] = lambda: provider
+    app.dependency_overrides[get_openrouter_provider] = lambda: provider
     app.dependency_overrides[get_chat_service] = lambda: chat_service
     return app
 
@@ -82,7 +82,7 @@ def test_system_status(client_configured):
     assert res.status_code == 200
     body = res.json()
     names = {c["name"] for c in body["components"]}
-    assert {"Backend", "Frontend", "OmniRoute", "AI Provider", "Tasks"} <= names
+    assert {"Backend", "Frontend", "OpenRouter", "AI Provider", "Tasks"} <= names
     assert body["overall"] in ("online", "degraded")
 
 
@@ -92,7 +92,7 @@ def test_providers_configured(client_configured):
     assert res.status_code == 200
     body = res.json()
     p = body["providers"][0]
-    assert p["name"] == "omniroute"
+    assert p["name"] == "openrouter"
     assert p["status"] == "connected"
     assert p["api_key_configured"] is True
     # The actual key must never appear
@@ -108,19 +108,19 @@ def test_providers_not_configured(client_not_configured):
     assert p["api_key_configured"] is False
 
 
-def test_omniroute_models(client_configured):
+def test_openrouter_models(client_configured):
     client, _ = client_configured
-    res = client.get("/api/providers/omniroute/models")
+    res = client.get("/api/providers/openrouter/models")
     assert res.status_code == 200
     body = res.json()
-    assert body["provider"] == "omniroute"
+    assert body["provider"] == "openrouter"
     assert body["count"] == 1
-    assert body["models"][0]["id"] == "auto/glm"
+    assert body["models"][0]["id"] == "openai/gpt-4o-mini"
 
 
-def test_omniroute_models_failure(client_failing):
+def test_openrouter_models_failure(client_failing):
     client, _ = client_failing
-    res = client.get("/api/providers/omniroute/models")
+    res = client.get("/api/providers/openrouter/models")
     assert res.status_code == 502
 
 
@@ -131,7 +131,7 @@ def test_chat_success(client_configured):
     body = res.json()
     assert body["reply"] == "Hello from Jarvis"
     assert body["status"] == "completed"
-    assert body["provider"] == "omniroute"
+    assert body["provider"] == "openrouter"
     assert body["run"]["success"] is True
     assert body["run"]["duration_ms"] >= 0
 

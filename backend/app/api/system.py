@@ -4,16 +4,16 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.config import get_settings
-from app.deps import get_omniroute_provider
+from app.deps import get_openrouter_provider
 from app.models.schemas import SystemComponent, SystemStatus
-from app.providers.omniroute import OmniRouteProvider
+from app.providers.openrouter import OpenRouterProvider
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 
 @router.get("/status", response_model=SystemStatus)
 async def system_status(
-    omniroute: OmniRouteProvider = Depends(get_omniroute_provider),
+    openrouter: OpenRouterProvider = Depends(get_openrouter_provider),
 ) -> SystemStatus:
     settings = get_settings()
 
@@ -22,32 +22,32 @@ async def system_status(
         SystemComponent(name="Frontend", status="online", detail="Next.js Control Room"),
     ]
 
-    # OmniRoute
-    if not omniroute.configured:
+    # OpenRouter
+    if not openrouter.configured:
         components.append(
             SystemComponent(
-                name="OmniRoute",
+                name="OpenRouter",
                 status="not_configured",
-                detail="OMNIROUTE_API_KEY missing in .env",
+                detail="OPENROUTER_API_KEY missing in .env",
             )
         )
     else:
-        reachable = await omniroute.health_check()
+        reachable = await openrouter.health_check()
         components.append(
             SystemComponent(
-                name="OmniRoute",
+                name="OpenRouter",
                 status="connected" if reachable else "offline",
-                detail=settings.omniroute_base_url,
+                detail=settings.openrouter_base_url,
             )
         )
 
-    # AI provider (same as OmniRoute in v0)
-    ai_status = "online" if omniroute.configured else "not_configured"
+    # AI provider (same as OpenRouter in v0)
+    ai_status = "online" if openrouter.configured else "not_configured"
     components.append(
         SystemComponent(
             name="AI Provider",
             status=ai_status,
-            detail=f"model={settings.omniroute_default_model}",
+            detail=f"model={settings.openrouter_default_model}",
         )
     )
 

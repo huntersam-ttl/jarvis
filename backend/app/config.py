@@ -1,7 +1,7 @@
 """Jarvis backend configuration.
 
 Settings are loaded from environment variables / .env via pydantic-settings.
-Secrets (OMNIROUTE_API_KEY) are never printed or logged.
+Secrets (OPENROUTER_API_KEY) are never printed or logged.
 """
 from __future__ import annotations
 
@@ -20,13 +20,15 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # ---- OmniRoute ----
-    omniroute_base_url: str = Field(
-        default="http://127.0.0.1:20128/v1",
-        alias="OMNIROUTE_BASE_URL",
+    # ---- OpenRouter ----
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        alias="OPENROUTER_BASE_URL",
     )
-    omniroute_api_key: str = Field(default="", alias="OMNIROUTE_API_KEY")
-    omniroute_default_model: str = Field(default="auto/glm", alias="OMNIROUTE_DEFAULT_MODEL")
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    openrouter_default_model: str = Field(
+        default="openai/gpt-4o-mini", alias="OPENROUTER_DEFAULT_MODEL"
+    )
 
     # ---- Backend ----
     jarvis_env: str = Field(default="dev", alias="JARVIS_ENV")
@@ -37,7 +39,7 @@ class Settings(BaseSettings):
         alias="JARVIS_CORS_ORIGINS",
     )
 
-    @field_validator("omniroute_api_key")
+    @field_validator("openrouter_api_key")
     @classmethod
     def _strip_key(cls, v: str) -> str:
         return (v or "").strip()
@@ -47,8 +49,8 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.jarvis_cors_origins.split(",") if o.strip()]
 
     @property
-    def omniroute_configured(self) -> bool:
-        return bool(self.omniroute_api_key)
+    def openrouter_configured(self) -> bool:
+        return bool(self.openrouter_api_key)
 
     @property
     def is_dev(self) -> bool:

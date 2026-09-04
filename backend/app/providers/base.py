@@ -38,4 +38,4 @@ class Provider(ABC):
 
     @property
     def default_model(self) -> str:
-        return getattr(self, "_default_model", "auto/glm")
+        return getattr(self, "_default_model", "")

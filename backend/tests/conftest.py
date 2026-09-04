@@ -7,5 +7,5 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Use a test environment so no real secrets are required.
 os.environ.setdefault("JARVIS_ENV", "test")
-os.environ.setdefault("OMNIROUTE_API_KEY", "")
-os.environ.setdefault("OMNIROUTE_DEFAULT_MODEL", "auto/glm")
+os.environ.setdefault("OPENROUTER_API_KEY", "")
+os.environ.setdefault("OPENROUTER_DEFAULT_MODEL", "openai/gpt-4o-mini")
