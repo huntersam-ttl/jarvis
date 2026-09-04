@@ -15,6 +15,7 @@ import type {
   TradingStatus,
   CancelResult,
   CodingAgentStatus,
+  CodingSkill,
   CodingTask,
   CreateCodingTaskRequest,
   ProjectRegistry,
@@ -63,6 +64,11 @@ export const api = {
     request<TradingCommandResult>(`/api/trading/${command}`, { method: "POST" }),
   codingStatus: () => request<CodingAgentStatus>("/api/agents/coding/status"),
   codingProjects: () => request<ProjectRegistry>("/api/agents/coding/projects"),
+  codingSkills: () => request<CodingSkill[]>("/api/agents/coding/skills"),
+  codingProfile: (projectPath: string) =>
+    request<Record<string, unknown>>(
+      `/api/agents/coding/profile?project_path=${encodeURIComponent(projectPath)}`
+    ),
   codingTask: (taskId: string) =>
     request<CodingTask>(`/api/agents/coding/tasks/${taskId}`),
   createCodingTask: (body: CreateCodingTaskRequest) =>

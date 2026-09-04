@@ -137,6 +137,8 @@ class OpenRouterProvider(Provider):
         reply = choices[0].get("message", {}).get("content", "")
         # Prefer the model actually reported by the provider, if present.
         used_model = data.get("model") or resolved_model
+        # Expose usage/cost metadata (never includes secrets) for cost control.
+        self.last_usage = data.get("usage") or None
         return reply.strip(), used_model
 
     async def get_model_info(self, model: str) -> dict:

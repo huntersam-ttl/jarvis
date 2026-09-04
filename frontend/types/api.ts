@@ -118,6 +118,20 @@ export type CodingAction = {
 export type CodingTask = {
   id: string;
   status: "ready" | "working" | "completed" | "failed" | "cancelled" | string;
+  phase?:
+    | "QUEUED"
+    | "ANALYZING"
+    | "PLANNING"
+    | "IMPLEMENTING"
+    | "TESTING"
+    | "DEBUGGING"
+    | "REVIEWING"
+    | "VERIFYING"
+    | "COMPLETED"
+    | "FAILED"
+    | "CANCELLED"
+    | "WAITING_APPROVAL"
+    | string;
   current_task: string;
   project_path: string;
   started_at: string;
@@ -126,6 +140,63 @@ export type CodingTask = {
   actions: CodingAction[];
   result?: string | null;
   steps_taken: number;
+  skills_used?: string[];
+  plan?: CodingPlan | null;
+  verification?: CodingVerification | null;
+  review?: CodingReview | null;
+  repair_loops?: number;
+  model_calls?: number;
+  estimated_tokens?: number;
+  estimated_cost_usd?: number;
+  git_commit?: string | null;
+};
+
+export type CodingPlanStep = { title: string; verify?: string };
+
+export type CodingPlan = {
+  objective: string;
+  complexity: "TRIVIAL" | "SMALL" | "MEDIUM" | "LARGE" | string;
+  assumptions?: string[];
+  files?: string[];
+  steps?: CodingPlanStep[];
+  risks?: string[];
+  verification?: string[];
+  rollback?: string;
+};
+
+export type CodingVerificationCheck = {
+  command: string;
+  ok: boolean;
+  output: string;
+  duration_ms: number;
+};
+
+export type CodingVerification = {
+  passed: boolean;
+  summary: string;
+  checks: CodingVerificationCheck[];
+};
+
+export type CodingReviewFinding = {
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "NIT" | string;
+  file: string;
+  issue: string;
+  suggestion?: string;
+};
+
+export type CodingReview = {
+  verdict: "approve" | "block" | "skipped" | string;
+  summary: string;
+  findings: CodingReviewFinding[];
+};
+
+export type CodingSkill = {
+  name: string;
+  purpose: string;
+  task_types: string[];
+  source: string;
+  attribution: string;
+  version: string;
 };
 
 export type CodingAgentStatus = {

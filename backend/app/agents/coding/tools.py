@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import re
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -219,6 +220,77 @@ class CodingTools:
             raise ToolError(f"git commit failed: {out}")
         return out or "Committed"
 
+    # ---- extended fs tools ------------------------------------------------
+    def search_files(self, pattern: str, glob: str = "*") -> str:
+        """Grep-like text search inside the workspace (excludes secrets)."""
+        import subprocess as sp
+
+        if any(p in pattern for p in NEVER_APPROVE_PATTERNS):
+            raise ToolError("Refusing to search for dangerous pattern")
+        try:
+            proc = sp.run(
+                ["grep", "-rn", "--include", glob, "-m", "20", "--", pattern, "."],
+                cwd=self.ctx.project_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, sp.TimeoutExpired) as exc:
+            raise ToolError(f"search failed: {exc}")
+        lines = [
+            ln for ln in proc.stdout.splitlines()
+            if ".env" not in ln and "node_modules" not in ln and ".venv" not in ln
+        ]
+        out = "\n".join(lines[:60])
+        return out or "(no matches)"
+
+    def read_file_lines(self, path: str, start: int, end: int) -> str:
+        f = self.ctx.resolve_in_workspace(path)
+        if self.ctx.is_secret_path(f):
+            raise ToolError("Refusing to read secret/credential files")
+        lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        start = max(1, start)
+        end = min(len(lines), max(end, start))
+        return "\n".join(f"{i}: {lines[i-1]}" for i in range(start, end + 1))
+
+    def create_directory(self, path: str) -> str:
+        d = self.ctx.resolve_in_workspace(path)
+        d.mkdir(parents=True, exist_ok=True)
+        return f"Created {d.relative_to(self.ctx.project_root)}"
+
+    def move_path(self, src: str, dst: str) -> str:
+        import shutil
+
+        s = self.ctx.resolve_in_workspace(src)
+        d = self.ctx.resolve_in_workspace(dst)
+        if self.ctx.is_secret_path(s) or self.ctx.is_secret_path(d):
+            raise ToolError("Refusing to move secret/credential files")
+        if s == self.ctx.project_root or self.ctx.project_root in (s, d):
+            raise ToolError("Refusing to move the project root")
+        d.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(s), str(d))
+        return f"Moved {s.name} -> {d.relative_to(self.ctx.project_root)}"
+
+    def git_branch(self, name: str, create: bool = True) -> str:
+        name = name.replace(" ", "-").strip()[:60]
+        if not re.fullmatch(r"[A-Za-z0-9/._-]+", name or ""):
+            raise ToolError("Invalid branch name")
+        cmd = f"git branch {name}" if create else f"git branch --list {name}"
+        out, ok = self.run_command(cmd, timeout=15)
+        if not ok:
+            raise ToolError(f"git branch failed: {out}")
+        return out or f"Branch {name} ready"
+
+    def git_checkout(self, name: str, create: bool = False) -> str:
+        name = name.replace(" ", "-").strip()[:60]
+        if not re.fullmatch(r"[A-Za-z0-9/._-]+", name or ""):
+            raise ToolError("Invalid branch name")
+        cmd = f"git checkout {'-b ' if create else ''}{name}"
+        out, ok = self.run_command(cmd, timeout=15)
+        if not ok:
+            raise ToolError(f"git checkout failed: {out}")
+        return out or f"On branch {name}"
+
     # ---- test / build -----------------------------------------------------
     def run_tests(self, command: Optional[str] = None) -> Tuple[str, bool]:
         return self.run_command(command or "pytest -q", timeout=300)
@@ -231,5 +303,7 @@ TOOL_NAMES = [
     "list_files", "read_file", "write_file", "replace_text",
     "run_command", "git_status", "git_diff", "git_log",
     "git_add", "git_commit", "run_tests", "run_build",
+    "search_files", "read_file_lines", "create_directory", "move_path",
+    "git_branch", "git_checkout",
 ]
 

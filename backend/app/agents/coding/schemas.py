@@ -21,9 +21,54 @@ class ActionRecord(BaseModel):
     duration_ms: float = 0.0
 
 
+class PlanStepModel(BaseModel):
+    title: str
+    verify: str = ""
+
+
+class TaskPlan(BaseModel):
+    objective: str = ""
+    complexity: str = "SMALL"  # TRIVIAL | SMALL | MEDIUM | LARGE
+    assumptions: List[str] = Field(default_factory=list)
+    files: List[str] = Field(default_factory=list)
+    steps: List[PlanStepModel] = Field(default_factory=list)
+    risks: List[str] = Field(default_factory=list)
+    verification: List[str] = Field(default_factory=list)
+    rollback: str = ""
+
+
+class VerificationCheckModel(BaseModel):
+    command: str
+    ok: bool
+    output: str = ""
+    duration_ms: float = 0.0
+
+
+class VerificationResultModel(BaseModel):
+    passed: bool
+    summary: str = ""
+    checks: List[VerificationCheckModel] = Field(default_factory=list)
+
+
+class ReviewFindingModel(BaseModel):
+    severity: str
+    file: str = "?"
+    issue: str = ""
+    suggestion: str = ""
+
+
+class ReviewResultModel(BaseModel):
+    verdict: str = "skipped"  # approve | block | skipped
+    summary: str = ""
+    findings: List[ReviewFindingModel] = Field(default_factory=list)
+
+
 class CodingTask(BaseModel):
     id: str
     status: str  # ready | working | completed | failed | cancelled
+    phase: str = "QUEUED"
+    # QUEUED ANALYZING PLANNING IMPLEMENTING TESTING DEBUGGING REVIEWING
+    # VERIFYING COMPLETED FAILED CANCELLED WAITING_APPROVAL
     current_task: str
     project_path: str
     started_at: str
@@ -32,6 +77,16 @@ class CodingTask(BaseModel):
     actions: List[ActionRecord] = Field(default_factory=list)
     result: Optional[str] = None
     steps_taken: int = 0
+    # engineering-agent extensions
+    skills_used: List[str] = Field(default_factory=list)
+    plan: Optional[TaskPlan] = None
+    verification: Optional[VerificationResultModel] = None
+    review: Optional[ReviewResultModel] = None
+    repair_loops: int = 0
+    model_calls: int = 0
+    estimated_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+    git_commit: Optional[str] = None
 
 
 class CodingAgentStatus(BaseModel):
@@ -49,6 +104,12 @@ class CreateCodingTaskRequest(BaseModel):
     max_steps: int = Field(default=12, ge=1, le=30)
     # Explicit approval for destructive operations (v1 escape hatch).
     approve_destructive: bool = False
+    # Engineering-agent cost controls
+    max_repair_loops: int = Field(default=2, ge=0, le=5)
+    max_reviewer_calls: int = Field(default=1, ge=0, le=3)
+    max_cost_usd: Optional[float] = Field(default=None, ge=0)
+    auto_commit: bool = True
+    create_project: bool = False  # new-project scaffold flow
 
 
 class CancelResult(BaseModel):

@@ -37,3 +37,7 @@ coverage/
 # Logs
 *.log
 logs/
+
+# Jarvis runtime data
+backend/jarvis_tasks.db
+

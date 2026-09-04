@@ -189,13 +189,15 @@ async def test_cancelled_task(ws):
 class NoopCodingAgent(CodingAgent):
     """Agent whose runner always completes immediately with one listing action."""
 
-    async def _execute(self, instruction, project_path, max_steps, approve_destructive, model):
+    async def _execute(self, instruction, project_path, max_steps,
+                       approve_destructive, model, **kwargs):
         task = self._task
         task.steps_taken = 1
         task.actions.append(
             self._record(1, "list_files", "", True, detail="listing", started=time.perf_counter())
         )
         task.status = "completed"
+        task.phase = "COMPLETED"
         task.result = f"Completed: {instruction}"
         task.finished_at = "2026-01-01T00:00:00+00:00"
 

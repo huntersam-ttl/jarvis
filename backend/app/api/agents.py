@@ -13,6 +13,7 @@ from app.agents.coding.schemas import (
 )
 from app.agents.coding.service import CodingAgentService
 from app.deps import get_coding_agent_service
+from app.skills.registry import get_skill_registry
 
 router = APIRouter(prefix="/api/agents/coding", tags=["agents"])
 
@@ -47,6 +48,35 @@ async def coding_projects(
     return ProjectRegistryResponse(projects=service.allowed_projects)
 
 
+@router.get("/skills")
+async def coding_skills() -> list[dict]:
+    """Available engineering skills with metadata + attribution."""
+    return get_skill_registry().metadata()
+
+
+@router.get("/profile")
+async def project_profile(
+    project_path: str,
+    service: CodingAgentService = Depends(_service),
+) -> dict:
+    """Deterministic ProjectProfile for a registered project."""
+    try:
+        return service.profile(project_path)
+    except AgentError as exc:
+        raise _agent_error(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/history")
+async def coding_history(
+    limit: int = 20,
+    service: CodingAgentService = Depends(_service),
+) -> list[dict]:
+    """Recent persisted tasks (survive backend restarts)."""
+    return service.history(limit=min(max(limit, 1), 100))
+
+
 @router.post("/tasks", response_model=CodingTask, status_code=202)
 async def create_coding_task(
     request: CreateCodingTaskRequest,
@@ -59,6 +89,10 @@ async def create_coding_task(
             model=request.model,
             max_steps=request.max_steps,
             approve_destructive=request.approve_destructive,
+            max_repair_loops=request.max_repair_loops,
+            max_reviewer_calls=request.max_reviewer_calls,
+            max_cost_usd=request.max_cost_usd,
+            auto_commit=request.auto_commit,
         )
     except AgentError as exc:
         raise _agent_error(exc) from exc

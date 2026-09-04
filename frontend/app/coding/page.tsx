@@ -13,6 +13,15 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+const PIPELINE = ["ANALYZING", "PLANNING", "IMPLEMENTING", "TESTING", "REVIEWING", "VERIFYING", "COMPLETED"] as const;
+
+function phaseIndex(phase?: string): number {
+  if (!phase) return -1;
+  if (phase === "DEBUGGING") return 2; // back to build step visually
+  const idx = PIPELINE.indexOf(phase as (typeof PIPELINE)[number]);
+  return idx;
+}
+
 function taskTone(status: string): { dot: "ok" | "warn" | "bad" | "idle"; cls: string } {
   if (status === "completed") return { dot: "ok", cls: "border-ok/25 bg-ok/10 text-ok" };
   if (status === "working" || status === "ready")
@@ -211,7 +220,113 @@ export default function CodingPage() {
             <span className="chip border-white/10 bg-ink-850/80 text-slate-400">
               {task.actions.length} action{task.actions.length === 1 ? "" : "s"}
             </span>
+            {(task.skills_used ?? []).length > 0 && (
+              <span className="chip border-accent/25 bg-accent/10 text-accent">
+                ⌘ {(task.skills_used ?? []).length} skill
+                {(task.skills_used ?? []).length === 1 ? "" : "s"}
+              </span>
+            )}
           </div>
+
+          {/* Task pipeline */}
+          <div className="mt-5 flex flex-wrap items-center gap-1.5">
+            {PIPELINE.map((p, i) => {
+              const cur = phaseIndex(task.phase);
+              const state =
+                task.phase === "FAILED" || task.phase === "CANCELLED"
+                  ? i <= cur
+                    ? "bad"
+                    : "idle"
+                  : i < cur
+                    ? "done"
+                    : i === cur
+                      ? "active"
+                      : "idle";
+              return (
+                <span key={p} className="flex items-center gap-1.5">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider transition-colors duration-300 ${
+                      state === "done"
+                        ? "bg-ok/10 text-ok"
+                        : state === "active"
+                          ? "bg-accent/15 text-accent shadow-glow"
+                          : state === "bad"
+                            ? "bg-bad/10 text-bad"
+                            : "bg-ink-850/80 text-slate-600"
+                    }`}
+                  >
+                    {p === "IMPLEMENTING" ? "Build" : p === "VERIFYING" ? "Verify" : p.charAt(0) + p.slice(1).toLowerCase()}
+                  </span>
+                  {i < PIPELINE.length - 1 && (
+                    <span className="text-slate-700">→</span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+
+          {/* Skills used */}
+          {(task.skills_used ?? []).length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {(task.skills_used ?? []).map((s) => (
+                <span
+                  key={s}
+                  className="chip border-white/10 bg-ink-850/80 text-slate-400"
+                  title={s}
+                >
+                  {s.replace(/-/g, " ")}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Verification result */}
+          {task.verification && (
+            <div
+              className={`mt-4 rounded-xl border px-4 py-3 ${
+                task.verification.passed
+                  ? "border-ok/25 bg-ok/5"
+                  : "border-bad/25 bg-bad/10"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <StatusDot status={task.verification.passed ? "ok" : "bad"} />
+                <span
+                  className={`font-medium ${task.verification.passed ? "text-ok" : "text-bad"}`}
+                >
+                  Verification {task.verification.passed ? "passed" : "failed"}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {task.verification.summary}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Review result */}
+          {task.review && task.review.verdict !== "skipped" && (
+            <div
+              className={`mt-3 rounded-xl border px-4 py-3 ${
+                task.review.verdict === "approve"
+                  ? "border-ok/25 bg-ok/5"
+                  : "border-warn/25 bg-warn/10"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <StatusDot
+                  status={task.review.verdict === "approve" ? "ok" : "warn"}
+                />
+                <span
+                  className={`font-medium ${
+                    task.review.verdict === "approve" ? "text-ok" : "text-warn"
+                  }`}
+                >
+                  Review: {task.review.verdict}
+                </span>
+                <span className="text-xs text-slate-500">{task.review.summary}</span>
+              </div>
+            </div>
+          )}
 
           {task.result && (
             <p className="mt-4 rounded-xl border border-ok/20 bg-ok/5 px-4 py-3 text-sm leading-relaxed text-slate-200">
@@ -259,9 +374,47 @@ export default function CodingPage() {
             <div className="space-y-3 border-t border-white/5 p-4">
               <div className="text-xs text-slate-500">
                 Task ID: <span className="font-mono text-slate-400">{task.id}</span> ·
-                Steps: {task.steps_taken} · Started:{" "}
-                {new Date(task.started_at).toLocaleString()}
+                Steps: {task.steps_taken} · Model calls: {task.model_calls ?? 0} ·
+                Repair loops: {task.repair_loops ?? 0}
+                {task.git_commit && (
+                  <>
+                    {" "}· Commit:{" "}
+                    <span className="font-mono text-slate-400">{task.git_commit}</span>
+                  </>
+                )}
               </div>
+
+              {task.plan && (task.plan.steps?.length ?? 0) > 0 && (
+                <div className="rounded-lg border border-white/5 bg-ink-950/60 p-3">
+                  <div className="label-eyebrow mb-2">
+                    Plan — {task.plan.complexity}
+                  </div>
+                  <ol className="space-y-1 text-xs text-slate-400">
+                    {(task.plan.steps ?? []).map((s, i) => (
+                      <li key={i}>
+                        {i + 1}. {s.title}
+                        {s.verify && (
+                          <span className="text-slate-600"> · verify: {s.verify}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              {task.verification && (task.verification.checks?.length ?? 0) > 0 && (
+                <div className="rounded-lg border border-white/5 bg-ink-950/60 p-3">
+                  <div className="label-eyebrow mb-2">Verification checks</div>
+                  <ul className="space-y-1 font-mono text-[11px] text-slate-500">
+                    {(task.verification.checks ?? []).map((c, i) => (
+                      <li key={i} className={c.ok ? "text-ok" : "text-bad"}>
+                        {c.ok ? "✔" : "✘"} $ {c.command} ({c.duration_ms}ms)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="max-h-80 space-y-2 overflow-y-auto">
                 {task.actions.map((a) => (
                   <div

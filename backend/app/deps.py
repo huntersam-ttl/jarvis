@@ -53,9 +53,41 @@ def get_trading_service() -> "TradingService":
     )
 
 
+_task_store = None  # created lazily on first persist
+
+
+def _persist_task(task) -> None:
+    """Persistence callback wired into the agent — never raises."""
+    global _task_store
+    try:
+        if _task_store is None:
+            from app.agents.coding.storage import TaskStore
+
+            _task_store = TaskStore(
+                Path(__file__).resolve().parents[1] / "jarvis_tasks.db"
+            )
+        _task_store.save(task.model_dump())
+    except Exception:
+        import logging
+
+        logging.getLogger("jarvis.deps").exception("task persistence failed")
+
+
 @lru_cache
 def get_coding_agent() -> "CodingAgent":
-    return CodingAgent(get_openrouter_provider())
+    return CodingAgent(get_openrouter_provider(), on_update=_persist_task)
+
+
+def get_task_store():
+    """Lazily create the SQLite task store without writing probe rows."""
+    global _task_store
+    if _task_store is None:
+        from app.agents.coding.storage import TaskStore
+
+        _task_store = TaskStore(
+            Path(__file__).resolve().parents[1] / "jarvis_tasks.db"
+        )
+    return _task_store
 
 
 @lru_cache
@@ -68,4 +100,5 @@ def get_coding_agent_service() -> CodingAgentService:
         allowed_projects=build_allowed_projects(
             settings.jarvis_allowed_projects, jarvis_root
         ),
+        store=get_task_store(),
     )
