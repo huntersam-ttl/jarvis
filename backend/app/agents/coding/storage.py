@@ -15,7 +15,7 @@ from app.core.logging import get_logger
 
 logger = get_logger("jarvis.agents.coding.storage")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class TaskStore:
@@ -40,20 +40,50 @@ class TaskStore:
             """
         )
         self._conn.commit()
-        self._conn.execute(
-            "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
-            (str(SCHEMA_VERSION),),
-        )
-        self._conn.commit()
+        self._migrate()
 
-    def save(self, task_dict: dict) -> None:
+    def _migrate(self) -> None:
+        """Deterministic in-place schema migration. Never drops data."""
+        row = self._conn.execute(
+            "SELECT value FROM meta WHERE key = 'schema_version'"
+        ).fetchone()
+        version = int(row[0]) if row else 1
+        if version < 2:
+            # v2: recovery columns for indexed checkpoint/phase queries.
+            for column in (
+                "checkpoint TEXT DEFAULT ''",
+                "phase TEXT",
+                "status TEXT",
+                "project_path TEXT",
+            ):
+                try:
+                    self._conn.execute(f"ALTER TABLE tasks ADD COLUMN {column}")
+                except sqlite3.OperationalError:
+                    pass  # column already exists — idempotent migration
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status)"
+            )
+            self._conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2')"
+            )
+            self._conn.commit()
+
+    def save(self, task_dict) -> None:
+        if hasattr(task_dict, "model_dump"):
+            task_dict = task_dict.model_dump()
         try:
             self._conn.execute(
-                "INSERT OR REPLACE INTO tasks (id, updated_at, payload) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO tasks "
+                "(id, updated_at, payload, checkpoint, phase, status, project_path) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     task_dict["id"],
                     task_dict.get("finished_at") or task_dict.get("started_at") or "",
                     json.dumps(task_dict),
+                    task_dict.get("checkpoint", ""),
+                    task_dict.get("phase", ""),
+                    task_dict.get("status", ""),
+                    task_dict.get("project_path", ""),
                 ),
             )
             self._conn.commit()

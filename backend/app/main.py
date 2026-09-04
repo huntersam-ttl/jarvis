@@ -1,6 +1,7 @@
 """Jarvis backend — FastAPI application entrypoint."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -28,6 +29,18 @@ async def lifespan(app: FastAPI):
         settings.openrouter_default_model,
         settings.openrouter_configured,
     )
+    # Durable recovery: resume interrupted engineering tasks from SQLite.
+    # Runs in the background so the API is immediately available.
+    async def _recover():
+        try:
+            service = get_coding_agent_service()
+            results = await service.recover_interrupted()
+            if results:
+                logger.info(f"recovered interrupted tasks: {results}")
+        except Exception:
+            logger.exception("task recovery failed")
+
+    asyncio.create_task(_recover())
     yield
     logger.info("Jarvis backend shutting down")
 

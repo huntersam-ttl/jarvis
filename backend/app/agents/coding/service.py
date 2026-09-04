@@ -96,3 +96,45 @@ class CodingAgentService:
     async def cancel(self, task_id: str) -> CodingTask:
         await self.task(task_id)  # raises if unknown
         return await self._agent.cancel()
+
+    # ---- restart recovery ------------------------------------------------
+    async def recover_interrupted(self) -> List[dict]:
+        """Recover non-terminal persisted tasks after a backend restart.
+
+        Deterministic: reads checkpoints from SQLite, validates git state,
+        and resumes from the checkpoint. Terminal tasks are never resumed.
+        """
+        if self._store is None:
+            return []
+        results: List[dict] = []
+        for payload in self._store.load_all():
+            status = payload.get("status")
+            if status in ("completed", "failed", "cancelled"):
+                continue  # terminal — never resume
+            task = CodingTask(**payload)
+            try:
+                self.validate_project(task.project_path)
+            except AgentError as exc:
+                task.status = "failed"
+                task.phase = "FAILED"
+                task.last_error = f"Recovery aborted (safety): {exc}"
+                self._store.save(task.model_dump())
+                results.append({"id": task.id, "status": task.status})
+                continue
+            if not task.checkpoint:
+                task.status = "failed"
+                task.phase = "FAILED"
+                task.last_error = (
+                    "Recovery aborted (safety): interrupted task has no checkpoint"
+                )
+                self._store.save(task.model_dump())
+                results.append({"id": task.id, "status": task.status})
+                continue
+            recovered = await self._agent.recover(task)
+            results.append({
+                "id": recovered.id,
+                "checkpoint": recovered.checkpoint,
+                "status": recovered.status,
+                "phase": recovered.phase,
+            })
+        return results

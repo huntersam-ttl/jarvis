@@ -136,10 +136,17 @@ class CodingAgent(Agent):
             self._task = CodingTask(
                 id=uuid.uuid4().hex[:12],
                 status="working",
+                phase="QUEUED",
+                checkpoint="TASK_CREATED",
                 current_task=instruction,
                 project_path=project_path,
                 started_at=_utcnow(),
             )
+        if self._on_update:
+            try:
+                self._on_update(self._task)
+            except Exception:
+                logger.exception("task persistence failed")
         asyncio.create_task(
             self._execute(
                 instruction, project_path, max_steps, approve_destructive, model,
@@ -161,6 +168,110 @@ class CodingAgent(Agent):
 
     @property
     def task(self) -> Optional[CodingTask]:
+        return self._task
+
+    # ---- durable recovery --------------------------------------------------
+    @staticmethod
+    def _git_snapshot(project_path: str) -> tuple:
+        """Deterministic (branch, changed_files) snapshot. No LLM involved."""
+        import subprocess
+
+        try:
+            proc = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=project_path, capture_output=True, text=True, timeout=10,
+            )
+            branch = proc.stdout.strip() if proc.returncode == 0 else None
+            proc = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=project_path, capture_output=True, text=True, timeout=10,
+            )
+            files = sorted(
+                line[3:].strip() for line in proc.stdout.splitlines() if len(line) > 3
+            ) if proc.returncode == 0 else []
+            return branch, files
+        except (OSError, subprocess.TimeoutExpired):
+            return None, None
+
+    def _fail_recovery(self, task: CodingTask, reason: str) -> CodingTask:
+        task.status = "failed"
+        task.phase = "FAILED"
+        task.finished_at = _utcnow()
+        task.last_error = f"Recovery aborted (safety): {reason}"
+        if self._on_update:
+            try:
+                self._on_update(task)
+            except Exception:
+                logger.exception("task persistence failed")
+        return task
+
+    async def recover(self, task: CodingTask) -> CodingTask:
+        """Deterministic recovery of an interrupted task from its checkpoint.
+
+        Never repeats destructive/deployment work, never re-runs a completed
+        commit, and never resumes mid-LLM-generation (checkpoints are only
+        written between stages).
+        """
+        if self._task and self._task.status == "working":
+            task.status = "failed"
+            task.last_error = "Recovery skipped: another task is active"
+            return task
+
+        task.status = "working"
+        task.phase = "RECOVERING"
+        self._cancel_requested = False
+        self._task = task
+        if self._on_update:
+            try:
+                self._on_update(task)
+            except Exception:
+                logger.exception("task persistence failed")
+
+        checkpoint = task.checkpoint
+        file_change_checkpoints = {
+            "FILES_CHANGED", "VERIFICATION_COMPLETE", "REVIEW_COMPLETE",
+        }
+
+        # ---- git safety ------------------------------------------------
+        profile = self.profile_for(task.project_path)
+        if profile.has_git:
+            branch, files = self._git_snapshot(task.project_path)
+            if files is None:
+                return self._fail_recovery(task, "git repository unreadable")
+            if checkpoint in file_change_checkpoints:
+                if task.git_branch and branch != task.git_branch:
+                    return self._fail_recovery(
+                        task,
+                        f"branch changed since checkpoint "
+                        f"(expected {task.git_branch!r}, found {branch!r})",
+                    )
+                if sorted(task.changed_files or []) != files:
+                    return self._fail_recovery(
+                        task,
+                        "changed files differ from checkpoint state "
+                        f"(checkpoint={task.changed_files}, current={files})",
+                    )
+            else:
+                if files:
+                    return self._fail_recovery(
+                        task,
+                        f"repository unexpectedly dirty for checkpoint "
+                        f"{checkpoint}: {files}",
+                    )
+        elif checkpoint in file_change_checkpoints:
+            return self._fail_recovery(
+                task, "files changed but project has no git repository to verify against"
+            )
+
+        # ---- deterministic dispatch (no LLM calls for decisions) ---------
+        await self._execute(
+            task.current_task,
+            task.project_path,
+            max_steps=12,
+            approve_destructive=False,
+            model=None,
+            resume_checkpoint=checkpoint,
+        )
         return self._task
 
     def profile_for(self, project_path: str) -> ProjectProfile:
@@ -199,6 +310,7 @@ class CodingAgent(Agent):
         max_reviewer_calls: int = 1,
         max_cost_usd: Optional[float] = None,
         auto_commit: bool = True,
+        resume_checkpoint: str = "",
     ) -> None:
         task = self._task
         assert task is not None
@@ -213,110 +325,63 @@ class CodingAgent(Agent):
                     logger.exception("task persistence failed")
 
         try:
-            # ---- ANALYZING -------------------------------------------------
-            task.phase = "ANALYZING"
-            persist()
-            profile = self.profile_for(project_path)
+            # ---- ANALYZING (skipped when resuming past analysis) -------------
+            if resume_checkpoint in ("", "TASK_CREATED"):
+                task.phase = "ANALYZING"
+                persist()
+                profile = self.profile_for(project_path)
+                task.checkpoint = "ANALYSIS_COMPLETE"
+                persist()
+            else:
+                profile = self.profile_for(project_path)
 
-            # ---- PLANNING --------------------------------------------------
-            task.phase = "PLANNING"
-            skills = self._registry.select(instruction)
-            task.skills_used = [s.name for s in skills]
-            persist()
-            plan: Plan = await generate_plan(
-                self._provider, instruction,
-                ContextBuilder(profile, skills).profile_summary(), model=model,
-            )
-            task.plan = TaskPlan(
-                objective=plan.objective,
-                complexity=plan.complexity,
-                assumptions=plan.assumptions,
-                files=plan.files,
-                steps=[{"title": s.title, "verify": s.verify} for s in plan.steps],
-                risks=plan.risks,
-                verification=plan.verification,
-                rollback=plan.rollback,
-            )
-            persist()
+            # ---- PLANNING (re-run only when the checkpoint predates it) ------
+            if resume_checkpoint in ("", "TASK_CREATED", "ANALYSIS_COMPLETE"):
+                task.phase = "PLANNING"
+                skills = self._registry.select(instruction)
+                task.skills_used = [s.name for s in skills]
+                persist()
+                plan: Plan = await generate_plan(
+                    self._provider, instruction,
+                    ContextBuilder(profile, skills).profile_summary(), model=model,
+                )
+                task.plan = TaskPlan(
+                    objective=plan.objective,
+                    complexity=plan.complexity,
+                    assumptions=plan.assumptions,
+                    files=plan.files,
+                    steps=[{"title": s.title, "verify": s.verify} for s in plan.steps],
+                    risks=plan.risks,
+                    verification=plan.verification,
+                    rollback=plan.rollback,
+                )
+                task.checkpoint = "PLAN_COMPLETE"
+                persist()
+            else:
+                skills = [
+                    s for s in (
+                        self._registry.get(name) for name in task.skills_used
+                    ) if s
+                ]
 
-            # ---- IMPLEMENTING → VERIFYING → DEBUGGING -----------------------
-            failures = ""
             context = ContextBuilder(profile, skills)
-            done_summary: Optional[str] = None
-            while True:
-                task.phase = "IMPLEMENTING"
-                persist()
-                done_summary = await self._implementation_loop(
-                    task, tools, context, instruction, failures, max_steps, model,
-                    max_cost_usd=max_cost_usd,
-                )
-                if self._cancel_requested:
-                    task.last_error = "Cancelled by user"
-                    return
-                if task.status != "working":
-                    # approval_required / failure already recorded in the loop
-                    task.finished_at = task.finished_at or _utcnow()
-                    persist()
-                    return
+            plan_objective = task.plan.objective if task.plan else ""
 
-                # ---- deterministic verification gate -------------------------
-                task.phase = "VERIFYING"
-                persist()
-                verification = run_verification(profile)
-                task.verification = VerificationResultModel(
-                    passed=verification.passed,
-                    summary=verification.summary,
-                    checks=[c.__dict__ for c in verification.checks],
-                )
-                persist()
-                if verification.passed:
-                    break
+            # ---- mode selection (deterministic, from checkpoint) --------------
+            if resume_checkpoint == "FILES_CHANGED":
+                mode = "verify"           # inspect diff, resume VERIFYING
+            elif resume_checkpoint in ("VERIFICATION_COMPLETE", "REVIEW_COMPLETE"):
+                mode = "review"           # resume REVIEWING / finalize
+            else:
+                mode = "full"
 
-                if task.repair_loops >= max_repair_loops:
-                    task.status = "failed"
-                    task.phase = "FAILED"
-                    task.last_error = (
-                        f"COMPLETION DENIED — verification failed after "
-                        f"{task.repair_loops} repair loops: {verification.summary}"
-                    )
-                    return
-                task.repair_loops += 1
-                task.phase = "DEBUGGING"
-                failures = verification.failure_digest()
-                persist()
-
-            # ---- REVIEWING (fresh-context model call) -------------------------
-            if max_reviewer_calls > 0 and profile.has_git:
-                task.phase = "REVIEWING"
-                persist()
-                diff = tools.git_diff()
-                review = await review_diff(self._provider, diff, instruction, model=model)
-                task.model_calls += 1
-                task.review = ReviewResultModel(
-                    verdict=review.verdict, summary=review.summary,
-                    findings=[f.__dict__ for f in review.findings],
-                )
-                persist()
-                if review.verdict == "block":
-                    task.status = "failed"
-                    task.phase = "FAILED"
-                    blocking = "; ".join(
-                        f"{f.severity}: {f.file}: {f.issue}" for f in review.blocking[:5]
-                    )
-                    task.last_error = f"Review blocked completion: {blocking}"
-                    return
-
-            # ---- atomic commit (deterministic, no LLM) --------------------------
-            if auto_commit and profile.has_git and tools.git_diff() != "(no changes)":
-                message = f"jarvis: {plan.objective[:120]}" if plan.objective else "jarvis: engineering task"
-                tools.git_add("-A")
-                commit_out = tools.git_commit(message)
-                match = re.search(r"[0-9a-f]{7,40}", commit_out or "")
-                task.git_commit = match.group(0) if match else None
-
-            task.status = "completed"
-            task.phase = "COMPLETED"
-            task.result = done_summary or "Task completed and verified"
+            await self._finish_task(
+                task, tools, context, profile, instruction, plan_objective, model,
+                max_steps, max_repair_loops, max_reviewer_calls, max_cost_usd,
+                auto_commit, mode,
+                review_done=(resume_checkpoint == "REVIEW_COMPLETE"),
+            )
+            return
         except AgentError as exc:
             task.status = "failed"
             task.phase = "FAILED"
@@ -333,6 +398,144 @@ class CodingAgent(Agent):
                 task.last_error = task.last_error or "Task ended unexpectedly"
             task.finished_at = task.finished_at or _utcnow()
             persist()
+
+    # ---- verification gate → review → commit → complete ----------------------
+    async def _finish_task(
+        self,
+        task: CodingTask,
+        tools: CodingTools,
+        context: ContextBuilder,
+        profile: ProjectProfile,
+        instruction: str,
+        plan_objective: str,
+        model: Optional[str],
+        max_steps: int,
+        max_repair_loops: int,
+        max_reviewer_calls: int,
+        max_cost_usd: Optional[float],
+        auto_commit: bool,
+        mode: str,  # full | verify | review
+        review_done: bool = False,
+    ) -> None:
+        def persist() -> None:
+            if self._on_update:
+                try:
+                    self._on_update(task)
+                except Exception:
+                    logger.exception("task persistence failed")
+
+        failures = ""
+        done_summary: Optional[str] = None
+        first = True
+
+        # ---- IMPLEMENTING → VERIFYING → DEBUGGING --------------------------
+        while mode != "review":
+            needs_impl = mode == "full" or not first or bool(failures)
+            if needs_impl:
+                task.phase = "IMPLEMENTING"
+                persist()
+                done_summary = await self._implementation_loop(
+                    task, tools, context, instruction, failures, max_steps, model,
+                    max_cost_usd=max_cost_usd,
+                )
+                if self._cancel_requested:
+                    task.last_error = "Cancelled by user"
+                    return
+                if task.status != "working":
+                    # approval_required / failure already recorded in the loop
+                    task.finished_at = task.finished_at or _utcnow()
+                    persist()
+                    return
+                # snapshot + checkpoint right after files changed
+                branch, files = self._git_snapshot(str(task.project_path))
+                task.git_branch = branch
+                task.changed_files = files
+                task.checkpoint = "FILES_CHANGED"
+                persist()
+
+            # ---- deterministic verification gate -----------------------------
+            task.phase = "VERIFYING"
+            persist()
+            verification = run_verification(profile)
+            task.verification = VerificationResultModel(
+                passed=verification.passed,
+                summary=verification.summary,
+                checks=[c.__dict__ for c in verification.checks],
+            )
+            if verification.passed:
+                task.checkpoint = "VERIFICATION_COMPLETE"
+            persist()
+            if verification.passed:
+                break
+
+            if task.repair_loops >= max_repair_loops:
+                task.status = "failed"
+                task.phase = "FAILED"
+                task.last_error = (
+                    f"COMPLETION DENIED — verification failed after "
+                    f"{task.repair_loops} repair loops: {verification.summary}"
+                )
+                return
+            task.repair_loops += 1
+            task.phase = "DEBUGGING"
+            failures = verification.failure_digest()
+            persist()
+            first = False
+
+        # ---- REVIEWING (fresh-context model call) ------------------------------
+        if review_done:
+            # Finalize only if the existing completion rules still pass.
+            if not (task.verification and task.verification.passed):
+                task.status = "failed"
+                task.phase = "FAILED"
+                task.last_error = (
+                    "Recovery aborted (safety): persisted verification does not pass"
+                )
+                return
+            if task.review and task.review.verdict == "block":
+                task.status = "failed"
+                task.phase = "FAILED"
+                task.last_error = (
+                    "Recovery aborted (safety): persisted review blocked completion"
+                )
+                return
+        elif max_reviewer_calls > 0 and profile.has_git:
+            task.phase = "REVIEWING"
+            persist()
+            diff = tools.git_diff()
+            review = await review_diff(self._provider, diff, instruction, model=model)
+            task.model_calls += 1
+            task.review = ReviewResultModel(
+                verdict=review.verdict, summary=review.summary,
+                findings=[f.__dict__ for f in review.findings],
+            )
+            if review.verdict != "block":
+                task.checkpoint = "REVIEW_COMPLETE"
+            persist()
+            if review.verdict == "block":
+                task.status = "failed"
+                task.phase = "FAILED"
+                blocking = "; ".join(
+                    f"{f.severity}: {f.file}: {f.issue}" for f in review.blocking[:5]
+                )
+                task.last_error = f"Review blocked completion: {blocking}"
+                return
+
+        # ---- atomic commit (deterministic, no LLM) ------------------------------
+        if auto_commit and profile.has_git and tools.git_diff() != "(no changes)":
+            message = (
+                f"jarvis: {plan_objective[:120]}" if plan_objective
+                else "jarvis: engineering task"
+            )
+            tools.git_add("-A")
+            commit_out = tools.git_commit(message)
+            match = re.search(r"[0-9a-f]{7,40}", commit_out or "")
+            task.git_commit = match.group(0) if match else None
+
+        task.status = "completed"
+        task.phase = "COMPLETED"
+        task.checkpoint = "COMPLETED"
+        task.result = done_summary or "Task completed and verified"
 
     # ---- implementation steps -----------------------------------------------
     async def _implementation_loop(

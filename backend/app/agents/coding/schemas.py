@@ -67,8 +67,11 @@ class CodingTask(BaseModel):
     id: str
     status: str  # ready | working | completed | failed | cancelled
     phase: str = "QUEUED"
-    # QUEUED ANALYZING PLANNING IMPLEMENTING TESTING DEBUGGING REVIEWING
-    # VERIFYING COMPLETED FAILED CANCELLED WAITING_APPROVAL
+    # QUEUED RECOVERING ANALYZING PLANNING IMPLEMENTING TESTING DEBUGGING
+    # REVIEWING VERIFYING COMPLETED FAILED CANCELLED WAITING_APPROVAL
+    checkpoint: str = ""
+    # TASK_CREATED ANALYSIS_COMPLETE PLAN_COMPLETE FILES_CHANGED
+    # VERIFICATION_COMPLETE REVIEW_COMPLETE COMPLETED
     current_task: str
     project_path: str
     started_at: str
@@ -87,6 +90,9 @@ class CodingTask(BaseModel):
     estimated_tokens: int = 0
     estimated_cost_usd: float = 0.0
     git_commit: Optional[str] = None
+    # recovery metadata
+    git_branch: Optional[str] = None
+    changed_files: List[str] = Field(default_factory=list)
 
 
 class CodingAgentStatus(BaseModel):
