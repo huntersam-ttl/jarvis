@@ -15,7 +15,7 @@ from app.core.logging import get_logger
 
 logger = get_logger("jarvis.agents.coding.storage")
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class TaskStore:
@@ -63,10 +63,16 @@ class TaskStore:
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status)"
             )
-            self._conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2')"
-            )
-            self._conn.commit()
+        if version < 3:
+            # v3: task execution config + git baseline live inside the JSON
+            # payload (backwards-compatible defaults), so no schema change is
+            # required — only the version marker moves forward.
+            pass
+        self._conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
+            (str(SCHEMA_VERSION),),
+        )
+        self._conn.commit()
 
     def save(self, task_dict) -> None:
         if hasattr(task_dict, "model_dump"):

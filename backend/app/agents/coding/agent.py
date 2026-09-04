@@ -25,6 +25,8 @@ from app.agents.coding.reviewer import review_diff
 from app.agents.coding.schemas import (
     ActionRecord,
     CodingTask,
+    ExecutionConfig,
+    GitBaseline,
     ReviewResultModel,
     TaskPlan,
     VerificationResultModel,
@@ -141,6 +143,14 @@ class CodingAgent(Agent):
                 current_task=instruction,
                 project_path=project_path,
                 started_at=_utcnow(),
+                execution_config=ExecutionConfig(
+                    max_steps=max_steps,
+                    max_repair_loops=max_repair_loops,
+                    max_reviewer_calls=max_reviewer_calls,
+                    max_cost_usd=max_cost_usd,
+                    auto_commit=auto_commit,
+                    approve_destructive=approve_destructive,
+                ),
             )
         if self._on_update:
             try:
@@ -173,7 +183,7 @@ class CodingAgent(Agent):
     # ---- durable recovery --------------------------------------------------
     @staticmethod
     def _git_snapshot(project_path: str) -> tuple:
-        """Deterministic (branch, changed_files) snapshot. No LLM involved."""
+        """Deterministic (branch, changed_files, head) snapshot. No LLM involved."""
         import subprocess
 
         try:
@@ -182,16 +192,23 @@ class CodingAgent(Agent):
                 cwd=project_path, capture_output=True, text=True, timeout=10,
             )
             branch = proc.stdout.strip() if proc.returncode == 0 else None
-            proc = subprocess.run(
-                ["git", "status", "--porcelain"],
+            proc2 = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=project_path, capture_output=True, text=True, timeout=10,
+            )
+            head = proc2.stdout.strip() if proc2.returncode == 0 else None
+            proc3 = subprocess.run(
+                ["git", "status", "--porcelain", "-uall"],
                 cwd=project_path, capture_output=True, text=True, timeout=10,
             )
             files = sorted(
-                line[3:].strip() for line in proc.stdout.splitlines() if len(line) > 3
-            ) if proc.returncode == 0 else []
-            return branch, files
+                line[3:].strip() for line in proc3.stdout.splitlines() if len(line) > 3
+            ) if proc3.returncode == 0 else []
+            if branch is None and head is None:
+                return None, None, None
+            return branch, files, head
         except (OSError, subprocess.TimeoutExpired):
-            return None, None
+            return None, None, None
 
     def _fail_recovery(self, task: CodingTask, reason: str) -> CodingTask:
         task.status = "failed"
@@ -204,6 +221,87 @@ class CodingAgent(Agent):
             except Exception:
                 logger.exception("task persistence failed")
         return task
+
+    def _git_consistency_failure(
+        self, task: CodingTask, checkpoint: str
+    ) -> Optional[str]:
+        """Deterministic git-state comparison. Returns a failure reason or None.
+
+        Baseline-aware: files dirty before the task started (git_baseline)
+        belong to the user — their presence is expected; only files that are
+        neither baseline nor Jarvis-changed indicate a conflict.
+        """
+        branch, files, head = self._git_snapshot(task.project_path)
+        if files is None:
+            return "git repository unreadable"
+        file_change_checkpoints = {
+            "FILES_CHANGED", "VERIFICATION_COMPLETE", "REVIEW_COMPLETE",
+        }
+        baseline = task.git_baseline
+        current = set(files)
+
+        if baseline is None:
+            # Legacy task without a baseline: strict pre-existing rules.
+            if checkpoint in file_change_checkpoints:
+                if task.git_branch and branch != task.git_branch:
+                    return (
+                        f"branch changed since checkpoint "
+                        f"(expected {task.git_branch!r}, found {branch!r})"
+                    )
+                if sorted(task.changed_files or []) != files:
+                    return (
+                        "changed files differ from checkpoint state "
+                        f"(checkpoint={task.changed_files}, current={files})"
+                    )
+            else:
+                if files:
+                    return (
+                        f"repository unexpectedly dirty for checkpoint "
+                        f"{checkpoint}: {files}"
+                    )
+            return None
+
+        # ---- baseline-aware comparison (deterministic, set-based) ----------
+        if task.git_branch and branch != task.git_branch:
+            return (
+                f"branch changed since checkpoint "
+                f"(expected {task.git_branch!r}, found {branch!r})"
+            )
+        if baseline.head and head and head != baseline.head:
+            return (
+                "HEAD moved since the task baseline "
+                "(external commit; cannot establish safety)"
+            )
+
+        baseline_set = set(baseline.changed_files)
+        changed = set(task.changed_files or [])
+
+        if checkpoint in file_change_checkpoints:
+            if changed & baseline_set:
+                return (
+                    "Jarvis-changed files overlap pre-existing dirty files; "
+                    f"cannot establish safety: {sorted(changed & baseline_set)}"
+                )
+            missing = changed - current
+            if missing:
+                return (
+                    "Jarvis-changed files are no longer present in the "
+                    f"working tree: {sorted(missing)}"
+                )
+        else:
+            if changed:
+                return (
+                    f"checkpoint {checkpoint} predates file changes, but the "
+                    "task records changed files"
+                )
+
+        unexpected = current - baseline_set - changed
+        if unexpected:
+            return (
+                "unexpected changed files since the task baseline "
+                f"(not pre-existing, not Jarvis-changed): {sorted(unexpected)}"
+            )
+        return None
 
     async def recover(self, task: CodingTask) -> CodingTask:
         """Deterministic recovery of an interrupted task from its checkpoint.
@@ -232,44 +330,29 @@ class CodingAgent(Agent):
             "FILES_CHANGED", "VERIFICATION_COMPLETE", "REVIEW_COMPLETE",
         }
 
-        # ---- git safety ------------------------------------------------
+        # ---- git safety (deterministic, baseline-aware) --------------------
         profile = self.profile_for(task.project_path)
         if profile.has_git:
-            branch, files = self._git_snapshot(task.project_path)
-            if files is None:
-                return self._fail_recovery(task, "git repository unreadable")
-            if checkpoint in file_change_checkpoints:
-                if task.git_branch and branch != task.git_branch:
-                    return self._fail_recovery(
-                        task,
-                        f"branch changed since checkpoint "
-                        f"(expected {task.git_branch!r}, found {branch!r})",
-                    )
-                if sorted(task.changed_files or []) != files:
-                    return self._fail_recovery(
-                        task,
-                        "changed files differ from checkpoint state "
-                        f"(checkpoint={task.changed_files}, current={files})",
-                    )
-            else:
-                if files:
-                    return self._fail_recovery(
-                        task,
-                        f"repository unexpectedly dirty for checkpoint "
-                        f"{checkpoint}: {files}",
-                    )
+            reason = self._git_consistency_failure(task, checkpoint)
+            if reason:
+                return self._fail_recovery(task, reason)
         elif checkpoint in file_change_checkpoints:
             return self._fail_recovery(
                 task, "files changed but project has no git repository to verify against"
             )
 
-        # ---- deterministic dispatch (no LLM calls for decisions) ---------
+        # ---- deterministic dispatch; restore original task budgets ----------
+        cfg = task.execution_config or ExecutionConfig()
         await self._execute(
             task.current_task,
             task.project_path,
-            max_steps=12,
-            approve_destructive=False,
+            max_steps=cfg.max_steps,
+            approve_destructive=cfg.approve_destructive,
             model=None,
+            max_repair_loops=cfg.max_repair_loops,
+            max_reviewer_calls=cfg.max_reviewer_calls,
+            max_cost_usd=cfg.max_cost_usd,
+            auto_commit=cfg.auto_commit,
             resume_checkpoint=checkpoint,
         )
         return self._task
@@ -367,6 +450,14 @@ class CodingAgent(Agent):
             context = ContextBuilder(profile, skills)
             plan_objective = task.plan.objective if task.plan else ""
 
+            # ---- pre-mutation Git baseline (deterministic, once) -------------
+            if task.git_baseline is None and profile.has_git:
+                branch, files, head = self._git_snapshot(project_path)
+                task.git_baseline = GitBaseline(
+                    branch=branch, head=head, changed_files=files or []
+                )
+                persist()
+
             # ---- mode selection (deterministic, from checkpoint) --------------
             if resume_checkpoint == "FILES_CHANGED":
                 mode = "verify"           # inspect diff, resume VERIFYING
@@ -447,7 +538,7 @@ class CodingAgent(Agent):
                     persist()
                     return
                 # snapshot + checkpoint right after files changed
-                branch, files = self._git_snapshot(str(task.project_path))
+                branch, files, _head = self._git_snapshot(str(task.project_path))
                 task.git_branch = branch
                 task.changed_files = files
                 task.checkpoint = "FILES_CHANGED"

@@ -93,6 +93,8 @@ class CodingTask(BaseModel):
     # recovery metadata
     git_branch: Optional[str] = None
     changed_files: List[str] = Field(default_factory=list)
+    execution_config: Optional[ExecutionConfig] = None
+    git_baseline: Optional[GitBaseline] = None
 
 
 class CodingAgentStatus(BaseModel):
@@ -126,3 +128,27 @@ class CancelResult(BaseModel):
 
 class ProjectRegistryResponse(BaseModel):
     projects: List[str]
+
+
+# ---------------------------------------------------------------- recovery metadata
+class ExecutionConfig(BaseModel):
+    """Original execution limits used when the task was created.
+
+    Restored verbatim on recovery so recovered tasks never fall back to
+    default budgets. No secrets — pure numeric/boolean settings.
+    """
+
+    max_steps: int = 12
+    max_repair_loops: int = 2
+    max_reviewer_calls: int = 1
+    max_cost_usd: Optional[float] = None
+    auto_commit: bool = True
+    approve_destructive: bool = False
+
+
+class GitBaseline(BaseModel):
+    """Deterministic pre-implementation Git state (no contents, no diffs)."""
+
+    branch: Optional[str] = None
+    head: Optional[str] = None
+    changed_files: List[str] = Field(default_factory=list)  # pre-existing dirty files
