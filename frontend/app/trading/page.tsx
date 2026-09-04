@@ -125,7 +125,7 @@ export default function TradingPage() {
                 </div>
               </div>
               <div className="rounded-xl border border-white/5 bg-ink-850/60 px-4 py-3">
-                <div className="label-eyebrow mb-1">Today's P&L</div>
+                <div className="label-eyebrow mb-1">Today&rsquo;s P&amp;L</div>
                 <div className={`text-sm font-medium ${pnlTone(status.today_pnl)}`}>
                   {fmtPnl(status.today_pnl)}
                 </div>
